@@ -1,0 +1,125 @@
+name: $(SourceBranchName)_$(Date:yyyyMMdd)$(Rev:.r)
+
+trigger:
+  tags:
+    include:
+    - 'refs/tags/uk-*'
+    - 'refs/tags/us-*'
+    - 'refs/tags/env-uk-*'
+    - 'refs/tags/env-us-*'
+    - 'refs/tags/infra-uk-*'
+    - 'refs/tags/infra-us-*'
+    - 'refs/tags/dev-uk-*'
+    - 'refs/tags/pre-uk-*'
+    - 'refs/tags/pro-uk-*'
+    - 'refs/tags/dev-us-*'
+    - 'refs/tags/pre-us-*'
+    - 'refs/tags/pro-us-*'
+    - 'refs/tags/WW-*'
+
+pool: Default
+
+variables:
+- name: countryCode
+  ${{ if or(startsWith(variables['Build.SourceBranch'], 'refs/tags/us-'), startsWith(variables['Build.SourceBranch'], 'refs/tags/infra-us-'), startsWith(variables['Build.SourceBranch'], 'refs/tags/env-us-'), startsWith(variables['Build.SourceBranch'], 'refs/tags/dev-us'), startsWith(variables['Build.SourceBranch'], 'refs/tags/pre-us'), startsWith(variables['Build.SourceBranch'], 'refs/tags/pro-us')) }}:
+    value: US
+  ${{ if or(startsWith(variables['Build.SourceBranch'], 'refs/tags/uk-'), startsWith(variables['Build.SourceBranch'], 'refs/tags/infra-uk-'), startsWith(variables['Build.SourceBranch'], 'refs/tags/env-uk-'), startsWith(variables['Build.SourceBranch'], 'refs/tags/dev-uk'), startsWith(variables['Build.SourceBranch'], 'refs/tags/pre-uk'), startsWith(variables['Build.SourceBranch'], 'refs/tags/pro-uk')) }}:
+    value: UK
+  ${{ if startsWith(variables['Build.SourceBranch'], 'refs/tags/ww-') }}:
+    value: WW
+- name: statefilename
+  value: "firebase" 
+- name: terraformVersion
+  value: '1.3.5'
+- name: usingProjVarGroup
+  value: false 
+- name: projectVariableGroup
+  value: "" 
+- name: terraformDirectory
+  value: ""
+
+
+resources:
+  repositories:
+    - repository: templates
+      type: git
+      name: DevOps/ADO-Deploy-Tools
+      ref: 'gcp'
+
+stages :
+  - ${{ if and(not(startsWith(variables['Build.SourceBranch'], 'refs/tags/ww-')), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/infra-'))) }}:
+    - ${{ if or(startsWith(variables['Build.SourceBranch'], 'refs/tags/env-'), startsWith(variables['Build.SourceBranch'], 'refs/tags/dev-')) }}:
+      - stage: Dev_${{ variables.countryCode }}
+        displayName: Dev ${{ variables.countryCode }}
+        jobs:
+          - template: v2/terraform/tf-complete-deploy.yaml@templates
+            parameters:
+              stateFileName: ${{ variables.statefilename }}
+              countryCode: ${{ variables.countryCode }}
+              environment: 'Development'
+              terraformVersion: ${{ variables.terraformVersion }}
+              usingProjVarGroup: ${{ variables.usingProjVarGroup }}
+              projectVariableGroup: ${{ variables.projectVariableGroup }}
+              terraformDirectory: ${{ variables.terraformDirectory }}
+              isDR: false
+
+    - ${{ if or(startsWith(variables['Build.SourceBranch'], 'refs/tags/env-'), startsWith(variables['Build.SourceBranch'], 'refs/tags/pre-')) }}:
+      - stage: Pre_${{ variables.countryCode }}
+        displayName: Pre ${{ variables.countryCode }}
+        jobs:
+          - template: v2/terraform/tf-complete-deploy.yaml@templates
+            parameters:
+              stateFileName: ${{ variables.statefilename }}
+              countryCode: ${{ variables.countryCode }}
+              environment: 'PreProduction'
+              terraformVersion: ${{ variables.terraformVersion }}
+              usingProjVarGroup: ${{ variables.usingProjVarGroup }}
+              projectVariableGroup: ${{ variables.projectVariableGroup }}
+              terraformDirectory: ${{ variables.terraformDirectory }}
+              isDR: false
+
+    - ${{ if or(startsWith(variables['Build.SourceBranch'], 'refs/tags/env-'), startsWith(variables['Build.SourceBranch'], 'refs/tags/pro-')) }}:
+      - stage: Pro_${{ variables.countryCode }}
+        displayName: Pro ${{ variables.countryCode }}
+        jobs:
+          - template: v2/terraform/tf-complete-deploy.yaml@templates
+            parameters:
+              stateFileName: ${{ variables.statefilename }}
+              countryCode: ${{ variables.countryCode }}
+              environment: 'Production'
+              terraformVersion: ${{ variables.terraformVersion }}
+              usingProjVarGroup: ${{ variables.usingProjVarGroup }}
+              projectVariableGroup: ${{ variables.projectVariableGroup }}
+              terraformDirectory: ${{ variables.terraformDirectory }}
+              isDR: false
+    
+    - ${{ if or(startsWith(variables['Build.SourceBranch'], 'refs/tags/env-'), startsWith(variables['Build.SourceBranch'], 'refs/tags/pro-')) }}:
+      - stage: Pro_${{ variables.countryCode }}_DR
+        displayName: Pro ${{ variables.countryCode }} DR
+        jobs:
+          - template: v2/terraform/tf-complete-deploy.yaml@templates
+            parameters:
+              stateFileName: ${{ variables.statefilename }}
+              countryCode: ${{ variables.countryCode }}
+              environment: 'Production'
+              terraformVersion: ${{ variables.terraformVersion }}
+              usingProjVarGroup: ${{ variables.usingProjVarGroup }}
+              projectVariableGroup: ${{ variables.projectVariableGroup }}
+              terraformDirectory: ${{ variables.terraformDirectory }}
+              isDR: true
+
+  - ${{ if and(not(startsWith(variables['Build.SourceBranch'], 'refs/tags/env-')), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/dev-')), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/pre-')), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/pro-'))) }}:
+    - stage: Infra_${{ variables.countryCode }}
+      displayName: Infrastructure ${{ variables.countryCode }}
+      dependsOn: []
+      jobs:
+        - template: v2/terraform/tf-complete-deploy.yaml@templates
+          parameters:
+            stateFileName: ${{ variables.statefilename }}
+            countryCode: ${{ variables.countryCode }}
+            environment: 'Infrastructure'
+            terraformVersion: ${{ variables.terraformVersion }}
+            usingProjVarGroup: ${{ variables.usingProjVarGroup }}
+            projectVariableGroup: ${{ variables.projectVariableGroup }}
+            terraformDirectory: ${{ variables.terraformDirectory }}
+            isDR: false
